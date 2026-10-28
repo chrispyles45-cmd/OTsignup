@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>OT Sign-Up Sheet</title>
+<style>
+  :root {
+    --bg: #0A0B0F; --card: #15171D; --border: #22242B; --text: #F5F3ED;
+    --muted: #8A8E98; --accent: #E3B15E;
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #F5F4F1; --card: #FFFFFF; --border: #DDDAD2;
+      --text: #1A1A1A; --muted: #6B6B6B; --accent: #B8791E;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 28px 18px 60px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { font-size: 13px; color: var(--muted); margin-bottom: 22px; }
+  .controls {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 18px; margin-bottom: 24px;
+  }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+  select, input[type="date"], input[type="text"] {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); padding: 10px; font-size: 15px; font-family: inherit;
+  }
+  .gen-btn {
+    width: 100%; background: var(--accent); color: #15171D; border: none; border-radius: 8px;
+    padding: 12px; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 6px;
+  }
+  .print-btn {
+    width: 100%; background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px;
+  }
+  #sheet { display: none; }
+  #sheet.show { display: block; }
+  .sheet-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 24px 22px;
+  }
+  .sheet-title { font-size: 19px; font-weight: 800; margin: 0 0 2px; }
+  .sheet-vacancy { font-size: 16px; text-align: center; font-weight: 700; margin: 4px 0 20px; }
+  .day-block { margin-bottom: 18px; }
+  .sign-line { border-top: 2px solid var(--border); height: 26px; margin-bottom: 6px; }
+  .day-name { font-weight: 700; font-size: 15px; }
+  .day-status { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .day-status.off { font-weight: 700; color: var(--text); }
+  .priority-row { display: flex; justify-content: space-between; margin-top: 4px; font-size: 13.5px; }
+  .priority-row span { font-weight: 600; }
+  .priority-row .tag { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; display: block; font-weight: 600; margin-bottom: 1px; }
+
+  @media print {
+    body { background: #fff; color: #000; }
+    .controls, .print-btn, h1, .sub { display: none !important; }
+    .wrap { max-width: 100%; padding: 0; }
+    .sheet-card { border: none; padding: 0; }
+    .sign-line { border-top: 1.5px solid #000; }
+    .day-status.off { color: #000; }
+    .priority-row .tag { color: #555; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>OT Sign-Up Sheet</h1>
+  <div class="sub">Pick who's on vacation and the week, then generate.</div>
+
+  <div class="controls">
+    <div class="field">
+      <label for="vacancy-select">Vacancy</label>
+      <select id="vacancy-select"></select>
+    </div>
+    <div class="field">
+      <label for="week-date">Week of (any day in the week works)</label>
+      <input type="date" id="week-date" />
+    </div>
+    <button class="gen-btn" id="generate-btn">Generate sheet</button>
+  </div>
+
+  <div class="controls">
+    <div class="sub" style="margin-bottom:12px;">Who's up first in each group — this is independent of the vacancy and can be changed anytime.</div>
+    <div class="field" id="order-cj"></div>
+    <div class="field" id="order-ab"></div>
+    <div class="field" id="order-bj"></div>
+  </div>
+
+  <div class="controls">
+    <button class="print-btn" id="edit-names-btn" style="margin-top:0;">Edit names</button>
+    <div id="names-form" style="display:none;margin-top:14px;">
+      <div class="field" id="names-cj"></div>
+      <div class="field" id="names-ab"></div>
+      <div class="field" id="names-bj"></div>
+      <button class="gen-btn" id="names-save-btn">Save names</button>
+    </div>
+  </div>
+
+  <div id="sheet">
+    <div class="sheet-card" id="sheet-content"></div>
+    <button class="gen-btn" id="html-btn" style="margin-top:10px;">Open as HTML page</button>
+    <button class="print-btn" id="word-btn">Export as Word doc</button>
+    <button class="print-btn" id="print-btn">Print this sheet</button>
+  </div>
+</div>
+
+<script crossorigin src="https://cdn.jsdelivr.net/npm/html-docx-js-version-updated@0.4.0/dist/html-docx.js"></script>
+<script>
+(function () {
+  // ---- Same rotation rules as the calendar, duplicated here deliberately (kept fully standalone) ----
+  var CYCLE_LEN = 21;
+  var CYCLE_SEGMENTS = [
+    { len: 8, type: 'day' },
+    { len: 4, type: 'off' },
+    { len: 7, type: 'afternoon' },
+    { len: 2, type: 'off' },
+  ];
+  var CREWS = [
+    { id: 'cj', label: 'Chris/CJ', anchor: new Date(2026, 6, 31), members: [{ id: 'cj_chris', name: 'Chris' }, { id: 'cj_cj', name: 'CJ' }] },
+    { id: 'ab', label: 'Allen/Brad', anchor: new Date(2026, 7, 7), members: [{ id: 'ab_allen', name: 'Allen' }, { id: 'ab_brad', name: 'Brad' }] },
+    { id: 'bj', label: 'Bill/Justin', anchor: new Date(2026, 6, 24), members: [{ id: 'bj_bill', name: 'Bill' }, { id: 'bj_justin', name: 'Justin' }] },
+  ];
+
+  function daysBetween(a, b) {
+    var ms = 24 * 60 * 60 * 1000;
+    var ua = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
+    var ub = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
+    return Math.round((ub - ua) / ms);
+  }
+  function shiftFor(crew, date) {
+    var idx = daysBetween(crew.anchor, date) % CYCLE_LEN;
+    if (idx < 0) idx += CYCLE_LEN;
+    var acc = 0;
+    for (var i = 0; i < CYCLE_SEGMENTS.length; i++) {
+      if (idx < acc + CYCLE_SEGMENTS[i].len) return CYCLE_SEGMENTS[i].type;
+      acc += CYCLE_SEGMENTS[i].len;
+    }
+    return 'off';
+  }
+  function crewOfPerson(personId) {
+    for (var i = 0; i < CREWS.length; i++) {
+      if (CREWS[i].members.some(function (m) { return m.id === personId; })) return CREWS[i];
+    }
+    return null;
+  }
+
+  // ---- Editable names (in case someone leaves/changes jobs) ----
+  try {
+    var savedNames = JSON.parse(localStorage.getItem('ot_signup_names') || '{}');
+    CREWS.forEach(function (c) {
+      c.members.forEach(function (m) { if (savedNames[m.id]) m.name = savedNames[m.id]; });
+    });
+  } catch (e) {}
+  function saveNames() {
+    var out = {};
+    CREWS.forEach(function (c) { c.members.forEach(function (m) { out[m.id] = m.name; }); });
+    try { localStorage.setItem('ot_signup_names', JSON.stringify(out)); } catch (e) {}
+  }
+  function renderVacancyOptions() {
+    var sel = document.getElementById('vacancy-select');
+    var prev = sel.value;
+    var html = '';
+    CREWS.forEach(function (c) {
+      c.members.forEach(function (m) { html += '<option value="' + m.id + '">' + m.name + '</option>'; });
+    });
+    sel.innerHTML = html;
+    if (prev && CREWS.some(function (c) { return c.members.some(function (m) { return m.id === prev; }); })) sel.value = prev;
+  }
+  function renderNamesForm() {
+    CREWS.forEach(function (c) {
+      var el = document.getElementById('names-' + c.id);
+      var html = '<label>' + c.label + '</label><div style="display:flex;gap:8px;">';
+      c.members.forEach(function (m) {
+        html += '<input type="text" data-person="' + m.id + '" value="' + m.name.replace(/"/g, '&quot;') + '">';
+      });
+      html += '</div>';
+      el.innerHTML = html;
+    });
+  }
+  renderNamesForm();
+  document.getElementById('edit-names-btn').addEventListener('click', function () {
+    var form = document.getElementById('names-form');
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+  });
+  document.getElementById('names-save-btn').addEventListener('click', function () {
+    document.querySelectorAll('[data-person]').forEach(function (input) {
+      var id = input.getAttribute('data-person');
+      var newName = input.value.trim();
+      if (!newName) return;
+      CREWS.forEach(function (c) {
+        c.members.forEach(function (m) { if (m.id === id) m.name = newName; });
+      });
+    });
+    saveNames();
+    renderVacancyOptions();
+    renderOrderControls();
+    document.getElementById('names-form').style.display = 'none';
+  });
+
+  // ---- Who's up first within each pair (separate from the vacancy, changeable anytime) ----
+  var firstPerson = {};
+  try {
+    var saved = JSON.parse(localStorage.getItem('ot_signup_first_person') || '{}');
+    CREWS.forEach(function (c) { firstPerson[c.id] = saved[c.id] || c.members[0].id; });
+  } catch (e) {
+    CREWS.forEach(function (c) { firstPerson[c.id] = c.members[0].id; });
+  }
+  function saveFirstPerson() {
+    try { localStorage.setItem('ot_signup_first_person', JSON.stringify(firstPerson)); } catch (e) {}
+  }
+  function orderedNames(crew) {
+    var first = firstPerson[crew.id];
+    var ms = crew.members.slice().sort(function (a, b) { return (a.id === first ? -1 : 0) - (b.id === first ? -1 : 0); });
+    return ms.map(function (m) { return m.name; }).join(' / ');
+  }
+  function renderOrderControls() {
+    CREWS.forEach(function (c) {
+      var el = document.getElementById('order-' + c.id);
+      var html = '<label>' + c.label + ' — up first</label><select data-crew="' + c.id + '">';
+      c.members.forEach(function (m) {
+        html += '<option value="' + m.id + '"' + (firstPerson[c.id] === m.id ? ' selected' : '') + '>' + m.name + '</option>';
+      });
+      html += '</select>';
+      el.innerHTML = html;
+    });
+    document.querySelectorAll('[data-crew]').forEach(function (sel) {
+      sel.addEventListener('change', function () {
+        firstPerson[sel.getAttribute('data-crew')] = sel.value;
+        saveFirstPerson();
+      });
+    });
+  }
+  renderOrderControls();
+  renderVacancyOptions();
+  function mondayOf(date) {
+    var d = new Date(date);
+    var day = d.getDay(); // 0 Sun .. 6 Sat
+    var diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    return d;
+  }
+
+  var DOW_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  function ordinalDate(d) {
+    var day = d.getDate();
+    var suf = 'th';
+    if (day % 10 === 1 && day !== 11) suf = 'st';
+    else if (day % 10 === 2 && day !== 12) suf = 'nd';
+    else if (day % 10 === 3 && day !== 13) suf = 'rd';
+    return d.toLocaleDateString(undefined, { month: 'long' }) + ' ' + day + suf;
+  }
+
+  function computeSheetData(vacancyPersonId, anyDateInWeek) {
+    var vacancyCrew = crewOfPerson(vacancyPersonId);
+    var vacancyPerson = vacancyCrew.members.find(function (m) { return m.id === vacancyPersonId; });
+    var monday = mondayOf(anyDateInWeek);
+    var days = [];
+
+    for (var i = 0; i < 7; i++) {
+      var d = new Date(monday);
+      d.setDate(d.getDate() + i);
+      var vacShift = shiftFor(vacancyCrew, d);
+      var day = { dayName: DOW_NAMES[d.getDay()], off: vacShift !== 'day' && vacShift !== 'afternoon' };
+      if (!day.off) {
+        day.label = vacShift === 'day' ? 'DAYS' : 'AFTERNOONS';
+        var others = CREWS.filter(function (c) { return c.id !== vacancyCrew.id; });
+        var offCrew = null, workingCrew = null;
+        others.forEach(function (c) {
+          var s = shiftFor(c, d);
+          if (s === 'off') offCrew = c; else workingCrew = c;
+        });
+        day.first = offCrew ? orderedNames(offCrew) : '';
+        day.second = workingCrew ? orderedNames(workingCrew) : '';
+      }
+      days.push(day);
+    }
+    return { weekLabel: ordinalDate(monday), vacancyName: vacancyPerson.name, days: days };
+  }
+
+  function renderSheetHtml(data) {
+    var html = '';
+    html += '<div class="sheet-title">Overtime Week of ' + data.weekLabel + '</div>';
+    html += '<div class="sheet-vacancy">Vacancy &ndash; ' + data.vacancyName + '</div>';
+    data.days.forEach(function (day) {
+      html += '<div class="day-block"><div class="sign-line"></div>';
+      html += '<div class="day-name">' + day.dayName + '</div>';
+      if (day.off) {
+        html += '<div class="day-status off">OFF</div>';
+      } else {
+        html += '<div class="day-status">' + day.label + '</div>';
+        html += '<div class="priority-row">';
+        html += '<span>' + day.first + '</span>';
+        html += '<span style="text-align:right;">' + day.second + '</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+    });
+    return html;
+  }
+
+  function buildPlainHtml(data) {
+    var body = '';
+    body += '<h1 style="font-size:22px;font-weight:800;margin:0 0 4px;">Overtime Week of ' + data.weekLabel + '</h1>';
+    body += '<div style="font-size:17px;font-weight:700;text-align:center;margin:8px 0 24px;">Vacancy &ndash; ' + data.vacancyName + '</div>';
+    data.days.forEach(function (day) {
+      body += '<div style="border-top:2px solid #000;height:26px;margin-bottom:6px;"></div>';
+      body += '<div style="font-weight:700;font-size:16px;">' + day.dayName + '</div>';
+      if (day.off) {
+        body += '<div style="font-weight:700;font-size:13px;margin:2px 0 16px;">OFF</div>';
+      } else {
+        body += '<div style="font-size:13px;color:#555;margin:2px 0 4px;">' + day.label + '</div>';
+        body += '<div style="display:flex;justify-content:space-between;margin-bottom:16px;font-size:14px;">';
+        body += '<div style="font-weight:700;">' + day.first + '</div>';
+        body += '<div style="text-align:right;font-weight:700;">' + day.second + '</div>';
+        body += '</div>';
+      }
+    });
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
+      '<title>OT Sign-Up — ' + data.weekLabel + '</title></head>' +
+      '<body style="font-family:-apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#111;max-width:640px;margin:24px auto;padding:0 16px;">' +
+      body + '</body></html>';
+  }
+
+  function buildWordDoc(data) {
+    var body = '';
+    body += '<p style="font-size:16pt;font-weight:bold;margin:0 0 2pt;">Overtime Week of ' + data.weekLabel + '</p>';
+    body += '<p style="font-size:13pt;font-weight:bold;text-align:center;margin:4pt 0 18pt;">Vacancy &ndash; ' + data.vacancyName + '</p>';
+    data.days.forEach(function (day) {
+      body += '<div style="border-top:1.5pt solid #000;height:22pt;margin-bottom:4pt;">&nbsp;</div>';
+      body += '<p style="font-weight:bold;font-size:12pt;margin:0;">' + day.dayName + '</p>';
+      if (day.off) {
+        body += '<p style="font-weight:bold;font-size:11pt;margin:2pt 0 14pt;">OFF</p>';
+      } else {
+        body += '<p style="font-size:11pt;color:#333;margin:2pt 0 4pt;">' + day.label + '</p>';
+        body += '<table style="width:100%;border-collapse:collapse;margin-bottom:14pt;"><tr>';
+        body += '<td style="width:50%;vertical-align:top;"><p style="font-size:11pt;font-weight:bold;margin:0;">' + day.first + '</p></td>';
+        body += '<td style="width:50%;vertical-align:top;text-align:right;"><p style="font-size:11pt;font-weight:bold;margin:0;">' + day.second + '</p></td>';
+        body += '</tr></table>';
+      }
+    });
+    return '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">' +
+      '<head><meta charset="utf-8"><title>OT Sign-Up Sheet</title></head>' +
+      '<body style="font-family:Calibri,Arial,sans-serif;color:#000;">' + body + '</body></html>';
+  }
+
+  var today = new Date();
+  document.getElementById('week-date').value =
+    today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+
+  var lastSheetData = null;
+
+  document.getElementById('generate-btn').addEventListener('click', function () {
+    var personId = document.getElementById('vacancy-select').value;
+    var dateVal = document.getElementById('week-date').value;
+    if (!dateVal) return;
+    var d = new Date(dateVal + 'T00:00:00');
+    lastSheetData = computeSheetData(personId, d);
+    document.getElementById('sheet-content').innerHTML = renderSheetHtml(lastSheetData);
+    document.getElementById('sheet').classList.add('show');
+  });
+
+  document.getElementById('print-btn').addEventListener('click', function () {
+    window.print();
+  });
+
+  document.getElementById('html-btn').addEventListener('click', function () {
+    if (!lastSheetData) return;
+    var htmlStr = buildPlainHtml(lastSheetData);
+    var blob = new Blob([htmlStr], { type: 'text/html' });
+    var url = URL.createObjectURL(blob);
+    var win = window.open(url, '_blank');
+    if (!win) {
+      // popup blocked — fall back to navigating this tab there
+      window.location.href = url;
+    }
+    setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+  });
+
+  document.getElementById('word-btn').addEventListener('click', function () {
+    if (!lastSheetData) return;
+    var btn = document.getElementById('word-btn');
+    var originalText = btn.textContent;
+    btn.textContent = 'Preparing\u2026';
+    btn.disabled = true;
+
+    function reset() { btn.textContent = originalText; btn.disabled = false; }
+
+    if (typeof htmlDocx === 'undefined' || !htmlDocx.asBlob) {
+      reset();
+      alert('The Word export tool is still loading \u2014 give it a second and try again.');
+      return;
+    }
+    var docHtml = buildWordDoc(lastSheetData);
+    var blob;
+    try {
+      blob = htmlDocx.asBlob(docHtml);
+    } catch (err) {
+      reset();
+      alert('Could not build the Word file. Try again.');
+      return;
+    }
+
+    var filename = 'OT-SignUp-' + lastSheetData.weekLabel.replace(/\s+/g, '-') + '.docx';
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+    reset();
+  });
+})();
+</script>
+</body>
+</html>
