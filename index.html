@@ -32,7 +32,7 @@
     padding: 18px; margin-bottom: 24px;
   }
   .field { margin-bottom: 14px; }
-  .field label { display: block; font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .field label { display: block; font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
   select, input[type="date"], input[type="text"] {
     width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
     color: var(--text); padding: 10px; font-size: 15px; font-family: inherit;
@@ -286,7 +286,7 @@
       var vacShift = shiftFor(vacancyCrew, d);
       var day = { dayName: DOW_NAMES[d.getDay()], off: vacShift !== 'day' && vacShift !== 'afternoon' };
       if (!day.off) {
-        day.label = vacShift === 'day' ? 'DAYS' : 'AFTERNOONS';
+        day.label = vacShift === 'day' ? 'Days' : 'Afternoons';
         var others = CREWS.filter(function (c) { return c.id !== vacancyCrew.id; });
         var offCrew = null, workingCrew = null;
         others.forEach(function (c) {
@@ -328,7 +328,7 @@
       html += '<div class="day-block"><div class="sign-line"></div>';
       html += '<div class="day-name">' + day.dayName + '</div>';
       if (day.off) {
-        html += '<div class="day-status off">OFF</div>';
+        html += '<div class="day-status off">Off</div>';
       } else {
         html += '<div class="day-status">' + day.label + '</div>';
         if (day.doubleCovered) {
@@ -352,7 +352,7 @@
       rows += '<div class="d-row">';
       rows += '<div class="d-name">' + day.dayName + '</div>';
       if (day.off) {
-        rows += '<div class="d-status">OFF</div>';
+        rows += '<div class="d-status">Off</div>';
       } else if (day.doubleCovered) {
         rows += '<div class="d-status">' + day.label + '</div>';
         rows += '<div class="d-names"><span>Double covered</span></div>';
