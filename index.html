@@ -33,13 +33,26 @@
   }
   .field { margin-bottom: 14px; }
   .field label { display: block; font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
-  select, input[type="date"], input[type="text"] {
+  select, input[type="date"], input[type="text"], textarea {
     width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
     color: var(--text); padding: 10px; font-size: 15px; font-family: inherit;
   }
+  textarea { resize: vertical; }
   .gen-btn {
     width: 100%; background: var(--accent); color: #15171D; border: none; border-radius: 8px;
     padding: 12px; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 6px;
+  }
+  .mode-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .mode-btn {
+    flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--muted); padding: 10px 8px; font-size: 13.5px; font-weight: 700; cursor: pointer;
+  }
+  .mode-btn.active { background: var(--accent); color: #15171D; border-color: var(--accent); }
+  .days-row { display: flex; gap: 10px; align-items: flex-end; }
+  .days-row .field { flex: 1; margin-bottom: 0; }
+  .days-row input[type="number"] {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); padding: 10px; font-size: 15px; font-family: inherit;
   }
   .print-btn {
     width: 100%; background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 8px;
@@ -52,7 +65,9 @@
   }
   .sheet-card, .sheet-card * { font-family: 'Avenir Next', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
   .sheet-title { font-size: 24px; font-weight: 800; margin: 0 0 4px; }
-  .sheet-vacancy { font-size: 20px; text-align: center; font-weight: 700; margin: 6px 0 24px; }
+  .sheet-header { margin-bottom: 24px; }
+  .sheet-vacancy { font-size: 20px; text-align: center; font-weight: 700; margin: 6px 0 0; }
+  .sheet-reason-display { font-size: 14px; color: var(--muted); text-align: center; margin: 8px 0 0; white-space: pre-wrap; }
   .day-block { margin-bottom: 22px; }
   .sign-line { border-top: 2px solid var(--border); height: 28px; margin-bottom: 8px; }
   .day-name { font-weight: 800; font-size: 19px; }
@@ -74,17 +89,43 @@
 <body>
 <div class="wrap">
   <h1>OT Sign-Up Sheet</h1>
-  <div class="sub">Pick who's on vacation and the week, then generate.</div>
+  <div class="sub">Choose a sheet type, fill in the details, then generate.</div>
 
   <div class="controls">
-    <div class="field">
-      <label for="vacancy-select">Vacancy</label>
-      <select id="vacancy-select"></select>
+    <div class="mode-row">
+      <button class="mode-btn active" id="mode-vacation-btn">Vacation coverage</button>
+      <button class="mode-btn" id="mode-midnight-btn">Midnight overtime</button>
     </div>
-    <div class="field">
-      <label for="week-date">Week of (any day in the week works)</label>
-      <input type="date" id="week-date" />
+
+    <div id="vacation-fields">
+      <div class="field">
+        <label for="vacancy-select">Vacancy</label>
+        <select id="vacancy-select"></select>
+      </div>
+      <div class="field">
+        <label for="week-date">Week of (any day in the week works)</label>
+        <input type="date" id="week-date" />
+      </div>
     </div>
+
+    <div id="midnight-fields" style="display:none;">
+      <div class="days-row">
+        <div class="field">
+          <label for="midnight-start">Start date</label>
+          <input type="date" id="midnight-start" />
+        </div>
+        <div class="field" style="max-width:110px;">
+          <label for="midnight-days">Days</label>
+          <input type="number" id="midnight-days" value="7" min="1" max="60" />
+        </div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="sheet-reason">Reason / notes (optional)</label>
+      <textarea id="sheet-reason" rows="2" placeholder="e.g. Equipment down on Line 3"></textarea>
+    </div>
+
     <button class="gen-btn" id="generate-btn">Generate sheet</button>
   </div>
 
@@ -146,6 +187,9 @@
       acc += CYCLE_SEGMENTS[i].len;
     }
     return 'off';
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
   function crewOfPerson(personId) {
     for (var i = 0; i < CREWS.length; i++) {
@@ -298,9 +342,7 @@
           // 8-day block as the other starts theirs). If the VACANCY itself is the day
           // shift, it's already naturally double covered by that overlap, so there's no
           // secondary group to list.
-          day.doubleCovered = true;
-          day.first = 'Double covered';
-          day.second = '';
+          day.groups = ['Double covered'];
         } else if (!offCrew) {
           // Afternoon vacancy landing on that same overlap Friday: neither other crew is
           // off (both are on day), so order them by who's closer to finishing their 8-day
@@ -308,37 +350,87 @@
           var idxA = cycleIndex(others[0], d), idxB = cycleIndex(others[1], d);
           var firstCrew = idxA >= idxB ? others[0] : others[1];
           var secondCrew = idxA >= idxB ? others[1] : others[0];
-          day.first = orderedNames(firstCrew);
-          day.second = orderedNames(secondCrew);
+          day.groups = [orderedNames(firstCrew), orderedNames(secondCrew)];
         } else {
-          day.first = orderedNames(offCrew);
-          day.second = workingCrew ? orderedNames(workingCrew) : '';
+          day.groups = [orderedNames(offCrew)];
+          if (workingCrew) day.groups.push(orderedNames(workingCrew));
         }
       }
       days.push(day);
     }
-    return { weekLabel: ordinalDate(monday), vacancyName: vacancyPerson.name, days: days };
+    return { mode: 'vacation', weekLabel: ordinalDate(monday), vacancyName: vacancyPerson.name, days: days };
+  }
+
+  // ---- Midnight overtime: open to all 3 crews every day, ranked off-crew first, then
+  // whoever's on afternoons, then whoever's on days. Covers an arbitrary date range
+  // (start date + a number of days), not necessarily aligned to a Mon\u2013Sun week.
+  function tierFor(shiftType) {
+    if (shiftType === 'off') return 0;
+    if (shiftType === 'afternoon') return 1;
+    return 2; // 'day'
+  }
+  function computeMidnightSheetData(startDateStr, numDays) {
+    var start = new Date(startDateStr + 'T00:00:00');
+    var n = Math.max(1, Math.min(60, parseInt(numDays, 10) || 7));
+    var days = [];
+
+    for (var i = 0; i < n; i++) {
+      var d = new Date(start);
+      d.setDate(d.getDate() + i);
+      var ranked = CREWS.map(function (c) {
+        return { crew: c, tier: tierFor(shiftFor(c, d)), idx: cycleIndex(c, d) };
+      });
+      // Within the same tier, whoever's closer to finishing their current segment (and
+      // so closer to their next break) gets listed first \u2014 same convention used for
+      // the day-shift overlap case on vacation coverage sheets.
+      ranked.sort(function (a, b) {
+        if (a.tier !== b.tier) return a.tier - b.tier;
+        return b.idx - a.idx;
+      });
+      days.push({
+        dayName: DOW_NAMES[d.getDay()],
+        dateLabel: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        off: false,
+        label: 'Midnight',
+        groups: ranked.map(function (r) { return orderedNames(r.crew); }),
+      });
+    }
+    var end = new Date(start);
+    end.setDate(end.getDate() + n - 1);
+    return {
+      mode: 'midnight',
+      weekLabel: ordinalDate(start) + (n > 1 ? ' \u2013 ' + ordinalDate(end) : ''),
+      days: days,
+    };
   }
 
   function renderSheetHtml(data) {
     var html = '';
-    html += '<div class="sheet-title">Overtime Week of ' + data.weekLabel + '</div>';
-    html += '<div class="sheet-vacancy">Vacancy &ndash; ' + data.vacancyName + '</div>';
+    html += '<div class="sheet-header">';
+    if (data.mode === 'midnight') {
+      html += '<div class="sheet-title">Midnight Overtime</div>';
+      html += '<div class="sheet-vacancy">' + data.weekLabel + '</div>';
+    } else {
+      html += '<div class="sheet-title">Overtime Week of ' + data.weekLabel + '</div>';
+      html += '<div class="sheet-vacancy">Vacancy &ndash; ' + data.vacancyName + '</div>';
+    }
+    if (data.reason) {
+      html += '<div class="sheet-reason-display">' + escapeHtml(data.reason) + '</div>';
+    }
+    html += '</div>';
     data.days.forEach(function (day) {
       html += '<div class="day-block"><div class="sign-line"></div>';
-      html += '<div class="day-name">' + day.dayName + '</div>';
+      html += '<div class="day-name">' + day.dayName + (day.dateLabel ? ' <span style="font-weight:500;">(' + day.dateLabel + ')</span>' : '') + '</div>';
       if (day.off) {
         html += '<div class="day-status off">Off</div>';
       } else {
         html += '<div class="day-status">' + day.label + '</div>';
-        if (day.doubleCovered) {
-          html += '<div class="priority-row"><span>Double covered</span></div>';
-        } else {
-          html += '<div class="priority-row">';
-          html += '<span>' + day.first + '</span>';
-          html += '<span style="text-align:right;">' + day.second + '</span>';
-          html += '</div>';
-        }
+        html += '<div class="priority-row">';
+        day.groups.forEach(function (name, i) {
+          var align = (i === 0) ? 'left' : (i === day.groups.length - 1 ? 'right' : 'center');
+          html += '<span style="text-align:' + align + ';">' + name + '</span>';
+        });
+        html += '</div>';
       }
       html += '</div>';
     });
@@ -350,15 +442,17 @@
     data.days.forEach(function (day) {
       rows += '<div class="d-bar"></div>';
       rows += '<div class="d-row">';
-      rows += '<div class="d-name">' + day.dayName + '</div>';
+      rows += '<div class="d-name">' + day.dayName + (day.dateLabel ? ' (' + day.dateLabel + ')' : '') + '</div>';
       if (day.off) {
         rows += '<div class="d-status">Off</div>';
-      } else if (day.doubleCovered) {
-        rows += '<div class="d-status">' + day.label + '</div>';
-        rows += '<div class="d-names"><span>Double covered</span></div>';
       } else {
         rows += '<div class="d-status">' + day.label + '</div>';
-        rows += '<div class="d-names"><span>' + day.first + '</span><span>' + day.second + '</span></div>';
+        rows += '<div class="d-names">';
+        day.groups.forEach(function (name, i) {
+          var align = (i === 0) ? 'left' : (i === day.groups.length - 1 ? 'right' : 'center');
+          rows += '<span style="text-align:' + align + ';">' + name + '</span>';
+        });
+        rows += '</div>';
       }
       rows += '</div>';
     });
@@ -369,12 +463,14 @@
       'padding:32px 20px 60px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}' +
       '.wrap{max-width:680px;margin:0 auto;}' +
       '.header{font-size:24px;font-weight:800;margin:0 0 6px;}' +
-      '.vac{font-size:20px;font-weight:700;text-align:center;margin:0 0 26px;}' +
+      '.vac{font-size:20px;font-weight:700;text-align:center;margin:0;}' +
+      '.reason{font-size:15px;color:#555;text-align:center;margin:8px 0 0;white-space:pre-wrap;}' +
+      '.header-wrap{margin-bottom:26px;}' +
       '.d-bar{background:#999;height:16px;margin-bottom:8px;}' +
       '.d-row{margin-bottom:22px;}' +
       '.d-name{font-size:20px;font-weight:800;margin-bottom:3px;}' +
       '.d-status{font-size:16px;font-weight:700;margin-bottom:6px;}' +
-      '.d-names{display:flex;justify-content:space-between;font-size:18px;font-weight:800;max-width:380px;}' +
+      '.d-names{display:flex;justify-content:space-between;font-size:18px;font-weight:800;max-width:580px;}' +
       '.print-bar{max-width:680px;margin:0 auto 18px;text-align:right;}' +
       '.print-btn{background:#333;color:#fff;border:none;border-radius:6px;padding:8px 16px;' +
       'font-size:13px;font-weight:600;cursor:pointer;}' +
@@ -382,22 +478,28 @@
       '@page{size:auto;margin:0.35in;}' +
       '.print-bar{display:none;}' +
       'body{padding:0;}' +
+      '.header-wrap{margin-bottom:12px;}' +
       '.header{font-size:17px;margin-bottom:2px;}' +
-      '.vac{font-size:14px;margin-bottom:10px;}' +
+      '.vac{font-size:14px;}' +
+      '.reason{font-size:12px;margin-top:4px;}' +
       '.d-bar{height:9px;margin-bottom:3px;}' +
       '.d-row{margin-bottom:8px;}' +
       '.d-name{font-size:13px;margin-bottom:1px;}' +
       '.d-status{font-size:11px;margin-bottom:1px;}' +
-      '.d-names{font-size:12px;max-width:260px;}' +
+      '.d-names{font-size:12px;max-width:420px;}' +
       '}';
+
+    var headerHtml = data.mode === 'midnight'
+      ? '<div class="header">Midnight Overtime</div><div class="vac">' + data.weekLabel + '</div>'
+      : '<div class="header">Overtime Week of ' + data.weekLabel + '</div><div class="vac">Vacancy - ' + data.vacancyName + '</div>';
+    if (data.reason) {
+      headerHtml += '<div class="reason">' + escapeHtml(data.reason) + '</div>';
+    }
+    headerHtml = '<div class="header-wrap">' + headerHtml + '</div>';
 
     var body = '' +
       '<div class="print-bar"><button class="print-btn" onclick="window.print()">Print</button></div>' +
-      '<div class="wrap">' +
-      '<div class="header">Overtime Week of ' + data.weekLabel + '</div>' +
-      '<div class="vac">Vacancy - ' + data.vacancyName + '</div>' +
-      rows +
-      '</div>';
+      '<div class="wrap">' + headerHtml + rows + '</div>';
 
     return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
       '<title>OT Sign-Up \u2014 ' + data.weekLabel + '</title><style>' + style + '</style></head>' +
@@ -405,17 +507,37 @@
   }
 
   var today = new Date();
-  document.getElementById('week-date').value =
-    today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+  var todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+  document.getElementById('week-date').value = todayStr;
+  document.getElementById('midnight-start').value = todayStr;
+
+  var sheetMode = 'vacation';
+  function setMode(mode) {
+    sheetMode = mode;
+    document.getElementById('mode-vacation-btn').classList.toggle('active', mode === 'vacation');
+    document.getElementById('mode-midnight-btn').classList.toggle('active', mode === 'midnight');
+    document.getElementById('vacation-fields').style.display = mode === 'vacation' ? 'block' : 'none';
+    document.getElementById('midnight-fields').style.display = mode === 'midnight' ? 'block' : 'none';
+  }
+  document.getElementById('mode-vacation-btn').addEventListener('click', function () { setMode('vacation'); });
+  document.getElementById('mode-midnight-btn').addEventListener('click', function () { setMode('midnight'); });
 
   var lastSheetData = null;
 
   document.getElementById('generate-btn').addEventListener('click', function () {
-    var personId = document.getElementById('vacancy-select').value;
-    var dateVal = document.getElementById('week-date').value;
-    if (!dateVal) return;
-    var d = new Date(dateVal + 'T00:00:00');
-    lastSheetData = computeSheetData(personId, d);
+    if (sheetMode === 'vacation') {
+      var personId = document.getElementById('vacancy-select').value;
+      var dateVal = document.getElementById('week-date').value;
+      if (!dateVal) return;
+      var d = new Date(dateVal + 'T00:00:00');
+      lastSheetData = computeSheetData(personId, d);
+    } else {
+      var startVal = document.getElementById('midnight-start').value;
+      var daysVal = document.getElementById('midnight-days').value;
+      if (!startVal) return;
+      lastSheetData = computeMidnightSheetData(startVal, daysVal);
+    }
+    lastSheetData.reason = document.getElementById('sheet-reason').value.trim();
     document.getElementById('sheet-content').innerHTML = renderSheetHtml(lastSheetData);
     document.getElementById('sheet').classList.add('show');
   });
