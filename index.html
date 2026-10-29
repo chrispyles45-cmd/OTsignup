@@ -277,8 +277,17 @@
           var s = shiftFor(c, d);
           if (s === 'off') offCrew = c; else workingCrew = c;
         });
-        day.first = offCrew ? orderedNames(offCrew) : '';
-        day.second = workingCrew ? orderedNames(workingCrew) : '';
+        if (!offCrew) {
+          // Once per 21-day cycle, two crews overlap on day shift (one finishing their
+          // 8-day block as the other starts theirs) \u2014 day shift is naturally double
+          // covered, so there's no "off" crew to list as a secondary group.
+          day.doubleCovered = true;
+          day.first = 'Double covered';
+          day.second = '';
+        } else {
+          day.first = orderedNames(offCrew);
+          day.second = workingCrew ? orderedNames(workingCrew) : '';
+        }
       }
       days.push(day);
     }
@@ -296,10 +305,14 @@
         html += '<div class="day-status off">OFF</div>';
       } else {
         html += '<div class="day-status">' + day.label + '</div>';
-        html += '<div class="priority-row">';
-        html += '<span>' + day.first + '</span>';
-        html += '<span style="text-align:right;">' + day.second + '</span>';
-        html += '</div>';
+        if (day.doubleCovered) {
+          html += '<div class="priority-row"><span>Double covered</span></div>';
+        } else {
+          html += '<div class="priority-row">';
+          html += '<span>' + day.first + '</span>';
+          html += '<span style="text-align:right;">' + day.second + '</span>';
+          html += '</div>';
+        }
       }
       html += '</div>';
     });
@@ -309,50 +322,44 @@
   function buildPlainHtml(data) {
     var rows = '';
     data.days.forEach(function (day) {
-      rows += '<div class="d-row' + (day.off ? ' d-off' : '') + '">';
-      rows += '<div class="d-sign"></div>';
-      rows += '<div class="d-main">';
+      rows += '<div class="d-bar"></div>';
+      rows += '<div class="d-row">';
       rows += '<div class="d-name">' + day.dayName + '</div>';
       if (day.off) {
-        rows += '<div class="d-status d-status-off">OFF</div>';
+        rows += '<div class="d-status">OFF</div>';
+      } else if (day.doubleCovered) {
+        rows += '<div class="d-status">' + day.label + '</div>';
+        rows += '<div class="d-names"><span>Double covered</span></div>';
       } else {
         rows += '<div class="d-status">' + day.label + '</div>';
         rows += '<div class="d-names"><span>' + day.first + '</span><span>' + day.second + '</span></div>';
       }
-      rows += '</div></div>';
+      rows += '</div>';
     });
 
     var style = '' +
-      ':root{--bg:#F5F4F1;--card:#FFFFFF;--border:#E3E0D8;--text:#1A1A1A;--muted:#6B6B6B;--accent:#B8791E;}' +
-      '@media(prefers-color-scheme:dark){:root{--bg:#0A0B0F;--card:#15171D;--border:#22242B;--text:#F5F3ED;--muted:#8A8E98;--accent:#E3B15E;}}' +
       '*{box-sizing:border-box;}' +
-      'body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,Arial,sans-serif;' +
-      'padding:32px 18px 60px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}' +
+      'body{margin:0;background:#fff;color:#000;font-family:Helvetica,Arial,sans-serif;' +
+      'padding:32px 20px 60px;}' +
       '.wrap{max-width:640px;margin:0 auto;}' +
-      '.header{text-align:center;margin-bottom:26px;}' +
-      '.header h1{font-size:23px;font-weight:800;margin:0 0 6px;}' +
-      '.header .vac{font-size:16px;font-weight:700;color:var(--accent);}' +
-      '.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:6px 22px;}' +
-      '.d-row{display:flex;gap:16px;padding:18px 0;border-bottom:1px solid var(--border);}' +
-      '.d-row:last-child{border-bottom:none;}' +
-      '.d-sign{width:70px;flex-shrink:0;border-bottom:2px solid var(--muted);height:1px;margin-top:22px;}' +
-      '.d-main{flex:1;}' +
-      '.d-name{font-weight:800;font-size:16px;}' +
-      '.d-status{font-size:12.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;margin-top:2px;}' +
-      '.d-status-off{color:var(--text);}' +
-      '.d-names{display:flex;justify-content:space-between;margin-top:8px;font-size:15px;font-weight:700;}' +
-      '.d-off .d-sign{display:none;}' +
-      '.print-bar{max-width:640px;margin:0 auto 20px;text-align:right;}' +
-      '.print-btn{background:var(--accent);color:#15171D;border:none;border-radius:8px;padding:10px 18px;' +
-      'font-size:14px;font-weight:700;cursor:pointer;}' +
-      '@media print{body{background:#fff;color:#000;padding:0;}.print-bar{display:none;}' +
-      '.card{border:none;padding:0;}.d-row{border-bottom:1px solid #000;}.header .vac{color:#000;}}';
+      '.header{font-size:17px;margin:0 0 4px;}' +
+      '.vac{font-size:16px;text-align:center;margin:0 0 18px;}' +
+      '.d-bar{background:#aaa;height:14px;margin-bottom:6px;}' +
+      '.d-row{margin-bottom:16px;}' +
+      '.d-name{font-size:16px;margin-bottom:2px;}' +
+      '.d-status{font-size:15px;margin-bottom:4px;}' +
+      '.d-names{display:flex;justify-content:space-between;font-size:15px;max-width:480px;}' +
+      '.print-bar{max-width:640px;margin:0 auto 18px;text-align:right;}' +
+      '.print-btn{background:#333;color:#fff;border:none;border-radius:6px;padding:8px 16px;' +
+      'font-size:13px;font-weight:600;cursor:pointer;}' +
+      '@media print{.print-bar{display:none;}}';
 
     var body = '' +
       '<div class="print-bar"><button class="print-btn" onclick="window.print()">Print</button></div>' +
       '<div class="wrap">' +
-      '<div class="header"><h1>Overtime Week of ' + data.weekLabel + '</h1><div class="vac">Vacancy &ndash; ' + data.vacancyName + '</div></div>' +
-      '<div class="card">' + rows + '</div>' +
+      '<div class="header">Overtime Week of ' + data.weekLabel + '</div>' +
+      '<div class="vac">Vacancy - ' + data.vacancyName + '</div>' +
+      rows +
       '</div>';
 
     return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
