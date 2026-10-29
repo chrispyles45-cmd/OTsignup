@@ -50,16 +50,16 @@
   .sheet-card {
     background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 24px 22px;
   }
-  .sheet-title { font-size: 19px; font-weight: 800; margin: 0 0 2px; }
-  .sheet-vacancy { font-size: 16px; text-align: center; font-weight: 700; margin: 4px 0 20px; }
-  .day-block { margin-bottom: 18px; }
-  .sign-line { border-top: 2px solid var(--border); height: 26px; margin-bottom: 6px; }
-  .day-name { font-weight: 700; font-size: 15px; }
-  .day-status { font-size: 13px; color: var(--muted); margin-top: 2px; }
-  .day-status.off { font-weight: 700; color: var(--text); }
-  .priority-row { display: flex; justify-content: space-between; margin-top: 4px; font-size: 13.5px; }
-  .priority-row span { font-weight: 600; }
-  .priority-row .tag { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; display: block; font-weight: 600; margin-bottom: 1px; }
+  .sheet-card, .sheet-card * { font-family: 'Avenir Next', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+  .sheet-title { font-size: 24px; font-weight: 800; margin: 0 0 4px; }
+  .sheet-vacancy { font-size: 20px; text-align: center; font-weight: 700; margin: 6px 0 24px; }
+  .day-block { margin-bottom: 22px; }
+  .sign-line { border-top: 2px solid var(--border); height: 28px; margin-bottom: 8px; }
+  .day-name { font-weight: 800; font-size: 19px; }
+  .day-status { font-size: 15px; font-weight: 700; color: var(--muted); margin-top: 3px; }
+  .day-status.off { font-weight: 800; color: var(--text); }
+  .priority-row { display: flex; justify-content: space-between; margin-top: 6px; font-size: 17px; }
+  .priority-row span { font-weight: 800; }
 
   @media print {
     body { background: #fff; color: #000; }
@@ -68,7 +68,6 @@
     .sheet-card { border: none; padding: 0; }
     .sign-line { border-top: 1.5px solid #000; }
     .day-status.off { color: #000; }
-    .priority-row .tag { color: #555; }
   }
 </style>
 </head>
@@ -134,9 +133,13 @@
     var ub = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
     return Math.round((ub - ua) / ms);
   }
-  function shiftFor(crew, date) {
+  function cycleIndex(crew, date) {
     var idx = daysBetween(crew.anchor, date) % CYCLE_LEN;
     if (idx < 0) idx += CYCLE_LEN;
+    return idx;
+  }
+  function shiftFor(crew, date) {
+    var idx = cycleIndex(crew, date);
     var acc = 0;
     for (var i = 0; i < CYCLE_SEGMENTS.length; i++) {
       if (idx < acc + CYCLE_SEGMENTS[i].len) return CYCLE_SEGMENTS[i].type;
@@ -161,7 +164,12 @@
   function saveNames() {
     var out = {};
     CREWS.forEach(function (c) { c.members.forEach(function (m) { out[m.id] = m.name; }); });
-    try { localStorage.setItem('ot_signup_names', JSON.stringify(out)); } catch (e) {}
+    try {
+      localStorage.setItem('ot_signup_names', JSON.stringify(out));
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
   function renderVacancyOptions() {
     var sel = document.getElementById('vacancy-select');
@@ -198,10 +206,18 @@
         c.members.forEach(function (m) { if (m.id === id) m.name = newName; });
       });
     });
-    saveNames();
+    var saveOk = saveNames();
     renderVacancyOptions();
     renderOrderControls();
     document.getElementById('names-form').style.display = 'none';
+    if (saveOk) {
+      var btn = document.getElementById('names-save-btn');
+      var original = btn.textContent;
+      btn.textContent = 'Saved \u2014 will stay like this';
+      setTimeout(function () { btn.textContent = original; }, 2000);
+    } else {
+      alert('Couldn\u2019t save these names on this device (your browser may be blocking storage, e.g. Private Browsing). The change will only last until you leave this page.');
+    }
   });
 
   // ---- Who's up first within each pair (separate from the vacancy, changeable anytime) ----
@@ -277,13 +293,23 @@
           var s = shiftFor(c, d);
           if (s === 'off') offCrew = c; else workingCrew = c;
         });
-        if (!offCrew) {
+        if (!offCrew && vacShift === 'day') {
           // Once per 21-day cycle, two crews overlap on day shift (one finishing their
-          // 8-day block as the other starts theirs) \u2014 day shift is naturally double
-          // covered, so there's no "off" crew to list as a secondary group.
+          // 8-day block as the other starts theirs). If the VACANCY itself is the day
+          // shift, it's already naturally double covered by that overlap, so there's no
+          // secondary group to list.
           day.doubleCovered = true;
           day.first = 'Double covered';
           day.second = '';
+        } else if (!offCrew) {
+          // Afternoon vacancy landing on that same overlap Friday: neither other crew is
+          // off (both are on day), so order them by who's closer to finishing their 8-day
+          // block and going into their 4-day break \u2014 they get first priority.
+          var idxA = cycleIndex(others[0], d), idxB = cycleIndex(others[1], d);
+          var firstCrew = idxA >= idxB ? others[0] : others[1];
+          var secondCrew = idxA >= idxB ? others[1] : others[0];
+          day.first = orderedNames(firstCrew);
+          day.second = orderedNames(secondCrew);
         } else {
           day.first = orderedNames(offCrew);
           day.second = workingCrew ? orderedNames(workingCrew) : '';
@@ -339,17 +365,17 @@
 
     var style = '' +
       '*{box-sizing:border-box;}' +
-      'body{margin:0;background:#fff;color:#000;font-family:Helvetica,Arial,sans-serif;' +
+      'body{margin:0;background:#fff;color:#000;font-family:\'Avenir Next\',\'Helvetica Neue\',Helvetica,Arial,sans-serif;' +
       'padding:32px 20px 60px;}' +
-      '.wrap{max-width:640px;margin:0 auto;}' +
-      '.header{font-size:17px;margin:0 0 4px;}' +
-      '.vac{font-size:16px;text-align:center;margin:0 0 18px;}' +
-      '.d-bar{background:#aaa;height:14px;margin-bottom:6px;}' +
-      '.d-row{margin-bottom:16px;}' +
-      '.d-name{font-size:16px;margin-bottom:2px;}' +
-      '.d-status{font-size:15px;margin-bottom:4px;}' +
-      '.d-names{display:flex;justify-content:space-between;font-size:15px;max-width:480px;}' +
-      '.print-bar{max-width:640px;margin:0 auto 18px;text-align:right;}' +
+      '.wrap{max-width:680px;margin:0 auto;}' +
+      '.header{font-size:24px;font-weight:800;margin:0 0 6px;}' +
+      '.vac{font-size:20px;font-weight:700;text-align:center;margin:0 0 26px;}' +
+      '.d-bar{background:#999;height:16px;margin-bottom:8px;}' +
+      '.d-row{margin-bottom:22px;}' +
+      '.d-name{font-size:20px;font-weight:800;margin-bottom:3px;}' +
+      '.d-status{font-size:16px;font-weight:700;margin-bottom:6px;}' +
+      '.d-names{display:flex;justify-content:space-between;font-size:18px;font-weight:800;max-width:520px;}' +
+      '.print-bar{max-width:680px;margin:0 auto 18px;text-align:right;}' +
       '.print-btn{background:#333;color:#fff;border:none;border-radius:6px;padding:8px 16px;' +
       'font-size:13px;font-weight:600;cursor:pointer;}' +
       '@media print{.print-bar{display:none;}}';
