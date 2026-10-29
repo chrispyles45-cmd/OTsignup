@@ -8,6 +8,7 @@
   :root {
     --bg: #0A0B0F; --card: #15171D; --border: #22242B; --text: #F5F3ED;
     --muted: #8A8E98; --accent: #E3B15E;
+    --day-color: #F5A623; --afternoon-color: #5C7CFA; --midnight-color: #8B5CF6; --vacation-color: #B565E8;
     color-scheme: dark;
   }
   @media (prefers-color-scheme: light) {
@@ -47,7 +48,9 @@
     flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
     color: var(--muted); padding: 10px 8px; font-size: 13.5px; font-weight: 700; cursor: pointer;
   }
-  .mode-btn.active { background: var(--accent); color: #15171D; border-color: var(--accent); }
+  .mode-btn.active { color: #15171D; }
+  #mode-vacation-btn.active { background: var(--vacation-color); border-color: var(--vacation-color); }
+  #mode-midnight-btn.active { background: var(--midnight-color); border-color: var(--midnight-color); }
   .days-row { display: flex; gap: 10px; align-items: flex-end; }
   .days-row .field { flex: 1; margin-bottom: 0; }
   .days-row input[type="number"] {
@@ -409,10 +412,10 @@
     html += '<div class="sheet-header">';
     if (data.mode === 'midnight') {
       html += '<div class="sheet-title">Midnight Overtime</div>';
-      html += '<div class="sheet-vacancy">' + data.weekLabel + '</div>';
+      html += '<div class="sheet-vacancy" style="color:var(--midnight-color);">' + data.weekLabel + '</div>';
     } else {
       html += '<div class="sheet-title">Overtime Week of ' + data.weekLabel + '</div>';
-      html += '<div class="sheet-vacancy">Vacancy &ndash; ' + data.vacancyName + '</div>';
+      html += '<div class="sheet-vacancy" style="color:var(--vacation-color);">Vacancy &ndash; ' + data.vacancyName + '</div>';
     }
     if (data.reason) {
       html += '<div class="sheet-reason-display">' + escapeHtml(data.reason) + '</div>';
@@ -424,7 +427,8 @@
       if (day.off) {
         html += '<div class="day-status off">Off</div>';
       } else {
-        html += '<div class="day-status">' + day.label + '</div>';
+        var labelColor = day.label === 'Days' ? 'var(--day-color)' : day.label === 'Afternoons' ? 'var(--afternoon-color)' : 'var(--midnight-color)';
+        html += '<div class="day-status" style="color:' + labelColor + ';">' + day.label + '</div>';
         html += '<div class="priority-row">';
         day.groups.forEach(function (name, i) {
           var align = (i === 0) ? 'left' : (i === day.groups.length - 1 ? 'right' : 'center');
@@ -518,9 +522,11 @@
     document.getElementById('mode-midnight-btn').classList.toggle('active', mode === 'midnight');
     document.getElementById('vacation-fields').style.display = mode === 'vacation' ? 'block' : 'none';
     document.getElementById('midnight-fields').style.display = mode === 'midnight' ? 'block' : 'none';
+    document.getElementById('generate-btn').style.background = mode === 'vacation' ? 'var(--vacation-color)' : 'var(--midnight-color)';
   }
   document.getElementById('mode-vacation-btn').addEventListener('click', function () { setMode('vacation'); });
   document.getElementById('mode-midnight-btn').addEventListener('click', function () { setMode('midnight'); });
+  setMode('vacation');
 
   var lastSheetData = null;
 
